@@ -41,7 +41,6 @@ momentum = 0.9
 input_size = 224
 crop_size = input_size
 scale_size = 224
-modality='RGB'
 lr = 0.001
 isdropout = True
 rotate_DA = 5
@@ -81,12 +80,11 @@ def main():
         train_loader = torch.utils.data.DataLoader(
                 dataset = TSNDataSet(root_path, train_list, num_segments=num_segments,
                              new_length=1,
-                             modality='RGB',
                              image_tmpl='{:03d}.jpeg',
                              transform=torchvision.transforms.Compose([
                              train_augmentation,
                              Stack(roll=False),
-                             ToTorchFormatTensor(div=(arch not in ['BNInception','InceptionV3'])),
+                             ToTorchFormatTensor(div=True),
                              normalize,
                              ])),
                 batch_size=batch_size, shuffle=True,
@@ -94,14 +92,13 @@ def main():
         val_loader = torch.utils.data.DataLoader(
                 TSNDataSet(root_path, val_list, num_segments=num_segments,
                            new_length=1,
-                           modality='RGB',
                            image_tmpl='{:03d}.jpeg',
                            random_shift=False,
                            transform=torchvision.transforms.Compose([
                                GroupScale(int(244)),
                                GroupCenterCrop(224),
-                               Stack(roll=(arch in ['BNInception','InceptionV3'])),
-                               ToTorchFormatTensor(div=(arch not in ['BNInception','InceptionV3'])),
+                               Stack(roll=False),
+                               ToTorchFormatTensor(div=True),
                                normalize,
                            ])),
                 batch_size=batch_size, shuffle=False,
@@ -137,15 +134,6 @@ def main():
                     }, is_best, best_prec1)
         ten_fold_best.append(best_prec1)
     print(ten_fold_best)
-    if(test_mode):
-        model = emo_id_net(num_classes,num_segments)
-        model_load_path = '_'.join((snapshot_pref, modality.lower(),str(best_prec1), 'model_best.pth.tar'))
-        checkpoint = torch.load(model_load_path)
-        
-        print("model epoch {} best prec@1: {}".format(checkpoint['epoch'], checkpoint['best_prec1']))
-        model.load_state_dict(checkpoint['state_dict'])
-        model = model.cuda()
-        test_pre = test(test_loader, model)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -296,10 +284,10 @@ def get_optim_policies(model):
         ]
 
 def save_checkpoint(state, is_best, best_prec1, filename='checkpoint.pth.tar'):
-    filename = '_'.join((snapshot_pref, modality.lower(), filename))
+    filename = '_'.join((snapshot_pref,  filename))
     torch.save(state, filename)
     if is_best:
-        best_name = '_'.join((snapshot_pref, modality.lower(),str(best_prec1), 'model_best.pth.tar'))
+        best_name = '_'.join((snapshot_pref, str(best_prec1), 'model_best.pth.tar'))
         shutil.copyfile(filename, best_name)
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
