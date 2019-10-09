@@ -25,7 +25,6 @@ isPretrainedOnKinetic = True
 freeze_id = True
 consensus_type = 'avg'
 consensus = ConsensusModule(consensus_type)
-arch='resnet18 + resnet3D18'
 no_partialbn = False
 input_mean = [0.5745987,0.49725866,0.46272627]  
 input_std = [0.20716324,0.19548155,0.19786908]       
@@ -55,7 +54,6 @@ def main():
     print("Freeze_id is: {}".format(freeze_id))
     print("num_segments is: {}".format(num_segments))
     print("weight_decay is: {}".format(weight_decay))
-    print("model structure is {}".format(arch))
     print("rotate_DA is {}".format(rotate_DA))
     print("bright_DA is {}".format(bright_DA))
     print("isPretrainedOnKinetic is {}".format(isPretrainedOnKinetic))
@@ -113,8 +111,7 @@ def main():
         model = model.cuda()
         initNetParams(model)
         criterion = torch.nn.CrossEntropyLoss().cuda()
-        policies = get_optim_policies(model)
-        optimizer = torch.optim.SGD(policies,lr,momentum = momentum,weight_decay = weight_decay)
+        optimizer = torch.optim.SGD(model.parameters(),lr,momentum = momentum,weight_decay = weight_decay)
         for epoch in range(0, epochs):
                 adjust_learning_rate(optimizer, epoch, lr)
                 # train for one epoch
@@ -128,7 +125,6 @@ def main():
                     best_prec1 = max(prec1, best_prec1)
                     save_checkpoint({
                         'epoch': epoch + 1,
-                        'arch': arch,
                         'state_dict': model.state_dict(),
                         'best_prec1': best_prec1,
                     }, is_best, best_prec1)
@@ -228,60 +224,6 @@ def validate(val_loader, model, criterion,iter):
     output_best = '\nBest Prec@1: %.3f'%(best_prec1)
     print(output_best)
     return top1.avg
-
-def get_optim_policies(model):
-    normal_weight = []
-    normal_bias = []
-    first_3d_conv_weight = []
-    first_3d_conv_bias = []
-    conv_cnt = 0
-    bn_cnt = 0
-    conv_3d_cnt = 0
-    bn = []
-    for m in model.modules():
-        if isinstance(m, torch.nn.Conv2d):
-            ps = list(m.parameters())
-            conv_cnt += 1
-            normal_weight.append(ps[0])
-            if len(ps) == 2:
-                normal_bias.append(ps[1])
-        elif isinstance(m, torch.nn.Conv3d):
-            ps = list(m.parameters())
-            conv_3d_cnt += 1
-            if conv_3d_cnt == 1:
-                first_3d_conv_weight.append(ps[0])
-                if len(ps) == 2:
-                    first_3d_conv_bias.append(ps[1])
-            else:
-                normal_weight.append(ps[0])
-                if len(ps) == 2:
-                    normal_bias.append(ps[1])
-        elif isinstance(m, torch.nn.Linear):
-            ps = list(m.parameters())
-            normal_weight.append(ps[0])
-            if len(ps) == 2:
-                normal_bias.append(ps[1])
-        elif isinstance(m, torch.nn.BatchNorm2d):
-            bn_cnt += 1
-            if bn_cnt == 1:
-                bn.extend(list(m.parameters()))
-        elif isinstance(m, torch.nn.BatchNorm3d):
-            bn_cnt += 1
-            if bn_cnt == 1:
-                bn.extend(list(m.parameters()))
-                
-    return [
-            {'params': first_3d_conv_weight, 'lr_mult': 1, 'decay_mult': 1,
-             'name': "first_3d_conv_weight"},
-            {'params': first_3d_conv_bias, 'lr_mult': 2, 'decay_mult': 0,
-             'name': "first_3d_conv_bias"},
-            {'params': normal_weight, 'lr_mult': 1, 'decay_mult': 1,
-             'name': "normal_weight"},
-            {'params': normal_bias, 'lr_mult': 2, 'decay_mult': 0,
-             'name': "normal_bias"},
-            {'params': bn, 'lr_mult': 1, 'decay_mult': 0,
-             'name': "BN scale/shift"},
-        ]
 
 def save_checkpoint(state, is_best, best_prec1, filename='checkpoint.pth.tar'):
     filename = '_'.join((snapshot_pref,  filename))
