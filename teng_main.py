@@ -21,7 +21,6 @@ from teng_emo_id_net import *
 from transforms import *
 
 test_mode = False
-isPretrainedOnKinetic = True
 freeze_id = True
 consensus_type = 'avg'
 consensus = ConsensusModule(consensus_type)
@@ -56,7 +55,6 @@ def main():
     print("weight_decay is: {}".format(weight_decay))
     print("rotate_DA is {}".format(rotate_DA))
     print("bright_DA is {}".format(bright_DA))
-    print("isPretrainedOnKinetic is {}".format(isPretrainedOnKinetic))
     print("image_source is {}".format(image_source))
     global best_prec1
     global snapshot_pref
@@ -103,11 +101,6 @@ def main():
                 num_workers=30, pin_memory=True,drop_last=False)
     
         model = emo_id_net(num_classes,num_segments,isdropout)
-        if(isPretrainedOnKinetic):
-            pretrain_path = '/home/developers/tengjianing/myfile/tsn-pytorch-minus-threed-full/oulu_fd_minus_18_18_7frames_emo_id_threed_full_pretrained_kinectic_rgb_model_best.pth.tar'
-            pretrain = torch.load(pretrain_path)
-            model.load_state_dict(pretrain['state_dict'])
-            model.classifier[0] = nn.Linear(512+512,6)
         model = model.cuda()
         initNetParams(model)
         criterion = torch.nn.CrossEntropyLoss().cuda()

@@ -21,9 +21,8 @@ class emo_id_net(nn.Module):
         self.emo = self.resnet18(True)
         self.id = self.idvideomodel(True)
         self.threed = self.resnetthreed(True)
-        self.classifier = nn.Sequential(
-             nn.Conv2d(512+512,400,1),
-         #   nn.Linear(512+512 , num_classes),
+        self.classifier = nn.Sequential(\
+            nn.Linear(512+512 , num_classes),
         )
         self.idBridge = nn.Sequential(
             nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0),
