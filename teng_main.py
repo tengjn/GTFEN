@@ -20,7 +20,6 @@ from dataset_video import TSNDataSet
 from teng_emo_id_net import *
 from transforms import *
 
-test_mode = False
 freeze_id = True
 consensus_type = 'avg'
 consensus = ConsensusModule(consensus_type)
@@ -40,7 +39,6 @@ input_size = 224
 crop_size = input_size
 scale_size = 224
 lr = 0.001
-isdropout = True
 rotate_DA = 5
 bright_DA = None
 weight_decay = 0.0001 ###  adjusting
@@ -100,7 +98,7 @@ def main():
                 batch_size=batch_size, shuffle=False,
                 num_workers=30, pin_memory=True,drop_last=False)
     
-        model = emo_id_net(num_classes,num_segments,isdropout)
+        model = emo_id_net(num_classes,num_segments)
         model = model.cuda()
         initNetParams(model)
         criterion = torch.nn.CrossEntropyLoss().cuda()
@@ -146,7 +144,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    top5 = AverageMeter()
     model.train()
     
     if freeze_id:
@@ -161,10 +158,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         loss = criterion(output, target_var)       
 
-        prec1, prec5 = accuracy(output.data, target, topk=(1,5))
+        prec1,_ = accuracy(output.data, target, topk=(1,5))
         losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
@@ -177,7 +173,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             output = ('Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t'
                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                        epoch, i, len(train_loader), loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr']))
+                        epoch, i, len(train_loader), loss=losses, top1=top1, lr=optimizer.param_groups[-1]['lr']))
             print(output)
 
 def validate(val_loader, model, criterion,iter):
@@ -195,11 +191,10 @@ def validate(val_loader, model, criterion,iter):
                
         loss = criterion(output, target_var)
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1,5))
+        prec1,_ = accuracy(output.data, target, topk=(1,5))
 
         losses.update(loss.item(), input.size(0))                  # pytorch 0.4 version
         top1.update(prec1.item(), input.size(0))
-        top5.update(prec5.item(), input.size(0))
         # measure elapsed time
 
         if i % 10 == 0:
@@ -208,11 +203,11 @@ def validate(val_loader, model, criterion,iter):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                    i, len(val_loader), batch_time=batch_time, loss=losses,
-                   top1=top1, top5=top5))
+                   top1=top1))
             print(output)
 
-    output = ('Testing Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
-          .format(top1=top1, top5=top5, loss=losses))
+    output = ('Testing Results: Prec@1 {top1.avg:.3f} Loss {loss.avg:.5f}'
+          .format(top1=top1, loss=losses))
     print(output)
     output_best = '\nBest Prec@1: %.3f'%(best_prec1)
     print(output_best)
@@ -243,16 +238,11 @@ def initNetParams(model):
         if isinstance(m, nn.Linear):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
-  #      elif isinstance(m, nn.Conv3d):
-  #         init.xavier_normal(m.weight)
-  #      elif isinstance(m, nn.BatchNorm3d):
-  #          init.constant(m.weight, 1)
-  #          init.constant(m.bias, 0)
+
 def adjust_learning_rate(optimizer, epoch, lr):
     lr = lr * (0.1 ** (epoch // sstep))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-
     
 if __name__ == '__main__':
     main()

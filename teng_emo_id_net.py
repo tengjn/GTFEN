@@ -15,7 +15,7 @@ model_urls = {
 }
 
 class emo_id_net(nn.Module):
-    def __init__(self, num_classes, num_segments, isdropout):
+    def __init__(self, num_classes, num_segments):
         super(emo_id_net, self).__init__()
         self.num_segments = num_segments
         self.emo = self.resnet18(True)
