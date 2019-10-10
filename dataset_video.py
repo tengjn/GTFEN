@@ -21,6 +21,10 @@ class VideoRecord(object):
     def label(self):
         return int(self._data[2])
 
+    @property
+    def id_label(self):
+        return int(self._data[3])
+
 
 class TSNDataSet(data.Dataset):
     def __init__(self, root_path, list_file,
@@ -50,7 +54,7 @@ class TSNDataSet(data.Dataset):
         print('video number:%d'%(len(self.video_list)))
 
     def _sample_indices_ori(self, record):
-        average_duration = (record.num_frames - self.new_length + 1) // self.num_segments    ##分段间隔
+        average_duration = (record.num_frames - self.new_length + 1) // self.num_segments
         if average_duration > 0:                       
             offsets = np.multiply(list(range(self.num_segments)), average_duration) + randint(average_duration, size=self.num_segments)
         elif record.num_frames > self.num_segments:
@@ -118,15 +122,7 @@ class TSNDataSet(data.Dataset):
                     p += 1
 
         process_data = self.transform(images)
-        return process_data, record.label
+        return process_data, record.label, record.id_label
 
     def __len__(self):
         return len(self.video_list)
-
-########  函数调用逻辑为  当class TSNdataset被实例化时，python自带函数__getitem__被自动调用
-########  __getitem__ -----> get ----->  _load_image     _load_image最终会完成通过路径拼接读取图像的任务
-#######   该程序读入list文件共有三列  通过class VideoRecord将三列信息封装为record  分别为视频路径  帧数  类别  该类的实例化在parse list中完成
-
-#######   函数_sample_indices为train时的帧选取方案   offsets为随机n帧的index，eg 12帧分3段  则offsets为[3 5 10]
-#######   _get_val_indices与_get_train_indices的分支进入区别是  train_loader(random_shift = true)  val_loader(random_shift = false)
-#######   测试时的读取方式为等距取三帧 每次取的都是固定的

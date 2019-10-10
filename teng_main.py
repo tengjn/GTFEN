@@ -98,25 +98,30 @@ def main():
                 batch_size=batch_size, shuffle=False,
                 num_workers=30, pin_memory=True,drop_last=False)
     
-        model = emo_id_net(num_classes,num_segments)
-        model = model.cuda()
-        initNetParams(model)
+        model_G = emo_id_net(num_classes,num_segments).cuda()
+        model_D = gan_id_net(num_classes, num_segments).cuda()
+        initNetParams(model_G)
+        initNetParams(model_D)
         criterion = torch.nn.CrossEntropyLoss().cuda()
-        optimizer = torch.optim.SGD(model.parameters(),lr,momentum = momentum,weight_decay = weight_decay)
+        optimizer_G = torch.optim.SGD(model_G.parameters(), lr, momentum = momentum, weight_decay = weight_decay)
+        optimizer_D = torch.optim.SGD(model_D.parameters(), lr, momentum = momentum, weight_decay = weight_decay)
+
         for epoch in range(0, epochs):
-                adjust_learning_rate(optimizer, epoch, lr)
-                # train for one epoch
-                train(train_loader, model, criterion, optimizer, epoch)
-    
+                adjust_learning_rate(optimizer_G,optimizer_D, epoch, lr)
+                if(epoch % 3 == 0):
+                    train_D(train_loader, model_G, model_D, criterion, optimizer_D, epoch)
+                else:
+                    train_G(train_loader, model_G, model_D, criterion, optimizer_G, epoch)
+
                 if (epoch + 1) % eval_freq == 0 or epoch == epochs - 1:
-                    prec1 = validate(val_loader, model, criterion,(epoch + 1) * len(train_loader))
+                    prec1 = validate(val_loader, model_G, criterion,(epoch + 1) * len(train_loader))
     
                     # remember best prec@1 and save checkpoint
                     is_best = prec1 > best_prec1
                     best_prec1 = max(prec1, best_prec1)
                     save_checkpoint({
                         'epoch': epoch + 1,
-                        'state_dict': model.state_dict(),
+                        'state_dict': model_G.state_dict(),
                         'best_prec1': best_prec1,
                     }, is_best, best_prec1)
         ten_fold_best.append(best_prec1)
@@ -139,61 +144,84 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-def train(train_loader, model, criterion, optimizer, epoch):
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
+def train_G(train_loader, model_G,model_D, criterion, optimizer_G, epoch):
+
     losses = AverageMeter()
     top1 = AverageMeter()
-    model.train()
-    
+    model_G.train()
+    model_D.train()
+
     if freeze_id:
-        for param in model.id.parameters():
+        for param in model_G.id.parameters():
             param.requires_grad = False
         
-    for i, (input, target) in enumerate(train_loader):
+    for i, (input, target, target_id) in enumerate(train_loader):
         target = target.cuda()
+        target_id = target.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
-        output = model(input_var)
+        target_id_var = torch.autograd.Variable(target_id)
 
-        loss = criterion(output, target_var)       
+        TFE_out, output = model_G(input_var)
+        output_id = model_D(TFE_out)
+
+        loss_exp = criterion(output, target_var)
+        loss_id = criterion(output_id, target_id_var)
+        loss = loss_exp - loss_id
 
         prec1,_ = accuracy(output.data, target, topk=(1,5))
         losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
+
+        optimizer_G.zero_grad()
         loss.backward()
-        
-        if clip_gradient is not None:
-            total_norm = clip_grad_norm_(model.parameters(), clip_gradient)
-        optimizer.step()
+        optimizer_G.step()
 
         if i % 10 == 0:
             output = ('Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t'
                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                        epoch, i, len(train_loader), loss=losses, top1=top1, lr=optimizer.param_groups[-1]['lr']))
+                        epoch, i, len(train_loader), loss=losses, top1=top1, lr=optimizer_G.param_groups[-1]['lr']))
             print(output)
 
-def validate(val_loader, model, criterion,iter):
+def train_D(train_loader, model_G, model_D, criterion, optimizer_D, epoch):
+
+    model_G.train()
+    model_D.train()
+    for i, (input, target, target_id) in enumerate(train_loader):
+        target = target.cuda()
+        target_id = target.cuda()
+        input_var = torch.autograd.Variable(input)
+        target_var = torch.autograd.Variable(target)
+        target_id_var = torch.autograd.Variable(target_id)
+
+        TFE_out,_ = model_G(input_var)
+        output_id = model_D(TFE_out)
+        loss = criterion(output_id, target_id_var)
+
+        optimizer_D.zero_grad()
+        loss.backward()
+        optimizer_D.step()
+        if i % 10 == 0:
+            print("D phase epoch {}, id loss is {}".format(epoch, loss))
+
+def validate(val_loader, model_G, criterion,iter):
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    top5 = AverageMeter()
-    model.eval()
+    model_G.eval()
 
-    for i, (input, target) in enumerate(val_loader):
+    for i, (input, target, target_id) in enumerate(val_loader):
         target = target.cuda()
+        target_id = target_id.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
-        output = model(input_var)
-               
+        target_id_var = torch.autograd.Variable(target_id)
+        _,output = model_G(input_var)
         loss = criterion(output, target_var)
-        # measure accuracy and record loss
         prec1,_ = accuracy(output.data, target, topk=(1,5))
 
-        losses.update(loss.item(), input.size(0))                  # pytorch 0.4 version
+        losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
         # measure elapsed time
 
@@ -219,6 +247,7 @@ def save_checkpoint(state, is_best, best_prec1, filename='checkpoint.pth.tar'):
     if is_best:
         best_name = '_'.join((snapshot_pref, str(best_prec1), 'model_best.pth.tar'))
         shutil.copyfile(filename, best_name)
+
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
@@ -239,9 +268,11 @@ def initNetParams(model):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
 
-def adjust_learning_rate(optimizer, epoch, lr):
+def adjust_learning_rate(optimizer_G,optimizer_D, epoch, lr):
     lr = lr * (0.1 ** (epoch // sstep))
-    for param_group in optimizer.param_groups:
+    for param_group in optimizer_G.param_groups:
+        param_group['lr'] = lr
+    for param_group in optimizer_D.param_groups:
         param_group['lr'] = lr
     
 if __name__ == '__main__':

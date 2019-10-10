@@ -1,9 +1,4 @@
-#################################################################################################
-################################### 3D  netork structure ########################################
-#################################################################################################
 
-from functools import partial
-from torch.autograd import Variable
 import torch.nn as nn
 import math
 import torch
@@ -12,10 +7,6 @@ from torch.autograd import Variable
 import math
 from functools import partial
 
-__all__ = [
-    'ResNet', 'resnet10', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
-    'resnet152', 'resnet200'
-]
 
 def conv3x3x3(in_planes, out_planes, stride=1):
     # 3x3x3 convolution with padding
