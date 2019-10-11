@@ -48,7 +48,7 @@ class TSNDataSet(data.Dataset):
     def _parse_list(self):
         # check the frame number is large >3:
         # usualy it is [video_id, num_frames, class_idx]
-        tmp = [x.strip().split(' ') for x in open(self.list_file)]
+        tmp = [x.strip().split(' ') for x in open(os.path.join(self.root_path,self.list_file))]
         tmp = [item for item in tmp if int(item[1])>=3]
         self.video_list = [VideoRecord(item) for item in tmp]
         print('video number:%d'%(len(self.video_list)))

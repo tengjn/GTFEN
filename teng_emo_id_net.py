@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from teng_resnet_emo import ResNet_emo, BasicBlock, Bottleneck
+from teng_resnet_emo import ResNet_emo, BasicBlock
 from teng_resnet_idex import ResNet_idex
 from teng_resnet_idcl import ResNet_idcl
 from teng_resnet_threed import ResNet_threed,BasicBlock_threed
@@ -73,8 +73,7 @@ class emo_id_net(nn.Module):
         model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
         if pretrained:
             n_finetune_classes = 80
-            pretrain = torch.load(id_pretrain_path)
-            model.load_state_dict(pretrain['state_dict'])
+            model.load_state_dict(id_pretrain_path['state_dict'])
             model.module.fc = nn.Linear(model.module.fc.in_features,n_finetune_classes)
             model.module.fc = model.module.fc.cuda()
         return model
@@ -95,7 +94,7 @@ class emo_id_net(nn.Module):
         return model
 
 
-class gan_id_net(nn.module):
+class gan_id_net(nn.Module):
     def __init__(self,num_classes, num_segments):
         super(gan_id_net,self).__init__()
         self.num_segments = num_segments
@@ -108,7 +107,7 @@ class gan_id_net(nn.module):
         id_test = id_test.view((-1, self.num_segments) + id_test.size()[1:])
         id_test = consensus(id_test)
         id_test = id_test.squeeze(1)        #  [16, 512, 1, 1]
-        id_test = id_test.view(id_test[0],-1)
+        id_test = id_test.view(-1,512)
         id_result = self.classifier(id_test)
         return id_result
 

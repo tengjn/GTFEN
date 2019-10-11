@@ -1,21 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-import torch
 import torch.nn as nn
-import torchvision
-import numpy as np
 import torchvision.transforms as transforms
-import torch.nn.functional as F
 import torch.nn.init as init
 import os
 import time
 import shutil
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
 import torch.optim
-from torch.nn.utils import clip_grad_norm_
-from ops.basic_ops import ConsensusModule
 from dataset_video import TSNDataSet
 from teng_emo_id_net import *
 from transforms import *
@@ -42,7 +34,7 @@ lr = 0.001
 rotate_DA = 5
 bright_DA = None
 weight_decay = 0.0001 ###  adjusting
-image_source = '/home/developers/tengjianing/myfile/oulu/video_by_class_frame_vl_s_FD_new_cross_txtsame'
+image_source = 'video_by_class_frame_vl_s_FD_new_cross_txtsame_id'
 Log_name = "same3"
 if not os.path.exists("best_models/" + Log_name):
     os.mkdir("best_models/" + Log_name)
@@ -152,7 +144,7 @@ def train_G(train_loader, model_G,model_D, criterion, optimizer_G, epoch):
     model_D.train()
 
     if freeze_id:
-        for param in model_G.id.parameters():
+        for param in model_G.idex.parameters():
             param.requires_grad = False
         
     for i, (input, target, target_id) in enumerate(train_loader):
