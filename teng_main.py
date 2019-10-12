@@ -13,26 +13,20 @@ from teng_emo_id_net import *
 from transforms import *
 
 freeze_id = True
-consensus_type = 'avg'
-consensus = ConsensusModule(consensus_type)
-no_partialbn = False
 input_mean = [0.5745987,0.49725866,0.46272627]  
 input_std = [0.20716324,0.19548155,0.19786908]       
 num_classes = 6
 num_segments = 7
 batch_size = 16
 epochs = 200
-sstep = 70
+sstep = 150
 eval_freq = 5
 
-clip_gradient = 20
 momentum = 0.9
 input_size = 224
-crop_size = input_size
-scale_size = 224
 lr = 0.001
-rotate_DA = 5
-bright_DA = None
+Alpha = 10
+
 weight_decay = 0.0001 ###  adjusting
 image_source = 'video_by_class_frame_vl_s_FD_new_cross_txtsame_id'
 Log_name = "same3"
@@ -43,8 +37,6 @@ def main():
     print("Freeze_id is: {}".format(freeze_id))
     print("num_segments is: {}".format(num_segments))
     print("weight_decay is: {}".format(weight_decay))
-    print("rotate_DA is {}".format(rotate_DA))
-    print("bright_DA is {}".format(bright_DA))
     print("image_source is {}".format(image_source))
     global best_prec1
     global snapshot_pref
@@ -159,7 +151,7 @@ def train_G(train_loader, model_G,model_D, criterion, optimizer_G, epoch):
 
         loss_exp = criterion(output, target_var)
         loss_id = criterion(output_id, target_id_var)
-        loss = loss_exp - loss_id
+        loss = Alpha * loss_exp - loss_id
 
         prec1,_ = accuracy(output.data, target, topk=(1,5))
         losses.update(loss.item(), input.size(0))
@@ -181,10 +173,8 @@ def train_D(train_loader, model_G, model_D, criterion, optimizer_D, epoch):
     model_G.train()
     model_D.train()
     for i, (input, target, target_id) in enumerate(train_loader):
-        target = target.cuda()
         target_id = target.cuda()
         input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
         target_id_var = torch.autograd.Variable(target_id)
 
         TFE_out,_ = model_G(input_var)
@@ -205,10 +195,8 @@ def validate(val_loader, model_G, criterion,iter):
 
     for i, (input, target, target_id) in enumerate(val_loader):
         target = target.cuda()
-        target_id = target_id.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
-        target_id_var = torch.autograd.Variable(target_id)
         _,output = model_G(input_var)
         loss = criterion(output, target_var)
         prec1,_ = accuracy(output.data, target, topk=(1,5))
