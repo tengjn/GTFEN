@@ -22,10 +22,11 @@ epochs = 200
 sstep = 150
 eval_freq = 5
 
+
 momentum = 0.9
 input_size = 224
 lr = 0.001
-Alpha = 10
+Alpha = 5
 
 weight_decay = 0.0001 ###  adjusting
 image_source = 'video_by_class_frame_vl_s_FD_new_cross_txtsame_id'
@@ -38,8 +39,10 @@ def main():
     print("num_segments is: {}".format(num_segments))
     print("weight_decay is: {}".format(weight_decay))
     print("image_source is {}".format(image_source))
+    print("Alpha is {}".format(Alpha))
     global best_prec1
     global snapshot_pref
+    final_accuracy = 0
     ten_fold_best = []
     for i in range(10):    
         best_prec1 = 0
@@ -109,7 +112,9 @@ def main():
                         'best_prec1': best_prec1,
                     }, is_best, best_prec1)
         ten_fold_best.append(best_prec1)
+        final_accuracy = final_accuracy + best_prec1
     print(ten_fold_best)
+    print("Final accuracy is {}".format(final_accuracy))
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -243,10 +248,17 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def initNetParams(model):
-    for m in model.modules():
+    for m in model.classifier.modules():
         if isinstance(m, nn.Linear):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
+    for m in model.idBridge.modules():
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+        elif isinstance(m, nn.BatchNorm2d):
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
 
 def adjust_learning_rate(optimizer_G,optimizer_D, epoch, lr):
     lr = lr * (0.1 ** (epoch // sstep))

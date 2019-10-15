@@ -4,6 +4,7 @@ from teng_resnet_emo import ResNet_emo, BasicBlock
 from teng_resnet_idex import ResNet_idex
 from teng_resnet_idcl import ResNet_idcl
 from teng_resnet_threed import ResNet_threed,BasicBlock_threed
+from teng_seNet_emo import Se_BasicBlock, SENet
 import torch.utils.model_zoo as model_zoo
 from ops.basic_ops import ConsensusModule
 
@@ -16,29 +17,54 @@ model_urls = {
 }
 id_pretrain_path = torch.load('/home/developers/tengjianing/myfile/oulu/oulu_vl_s_FD_id_v1_no_ft_rgb_model_best.pth.tar')
 pretrained_dict_3d_path = torch.load("/home/developers/tengjianing/myfile/pretrained_model/resnet-18-kinetics.pth")
+se_pretrain_path = torch.load('/home/developers/tengjianing/another/GTFEN/seresnet18.pth')
+
+
+def se_dict_vary(pretrain_path):
+    se_new_dict = {}
+    for k in id_pretrain_path:
+        a = k.split('.')
+        if 'se_module' in a:
+            new_name = a[0] + '.' + a[1] + '.' + a[3] + '.' + a[4]
+            if a[4] == 'weight':
+                pretrain_path[k] = pretrain_path[k].squeeze(2).squeeze(2)
+                se_new_dict[new_name] = pretrain_path[k]
+            else:
+                se_new_dict[new_name] = pretrain_path[k]
+        elif 'layer0' in a:
+            new_name = k[7:]
+            se_new_dict[new_name] = pretrain_path[k]
+        elif 'last_linear' in a:
+            new_name = 'fc.' + a[1]
+            se_new_dict[new_name] = pretrain_path[k]
+        else:
+            se_new_dict[k] = pretrain_path[k]
+    return se_new_dict
+se_new_dict = se_dict_vary(se_pretrain_path)
 
 class emo_id_net(nn.Module):
     def __init__(self, num_classes, num_segments):
         super(emo_id_net, self).__init__()
         self.num_segments = num_segments
-        self.emo = self.resnet18(True)
+        self.emo = self.se_resnet18(True)
         self.idex = self.idextractor(True)
         self.threed = self.resnetthreed(True)
         self.classifier = nn.Sequential(
             nn.Linear(512 , num_classes),
         )
         self.idBridge = nn.Sequential(
-            nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1,stride=1,padding=0),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(in_channels=64,out_channels=64,kernel_size=1,stride=1,padding=0),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=128,out_channels=128,kernel_size=1,stride=1,padding=0),
+            nn.Conv2d(in_channels=64,out_channels=128,kernel_size=1,stride=1,padding=0),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
         )
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(0.2)
+
         
     def forward(self, x): 
         emo_out = self.emo(x)      #    [112, 128, 28, 28] [112, 512, 1, 1]
@@ -66,7 +92,15 @@ class emo_id_net(nn.Module):
             model = model.cuda()
             model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
         return model
-        
+
+    def se_resnet18(self,pretrained=False):
+        model = SENet(Se_BasicBlock, [2, 2, 2, 2])
+        if pretrained:
+            model.load_state_dict(se_new_dict)
+            model = model.cuda()
+            model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
+        return model
+
     def idextractor(self,pretrained=True):
         model = ResNet_idex(BasicBlock, [2, 2, 2, 2])
         model = model.cuda()
