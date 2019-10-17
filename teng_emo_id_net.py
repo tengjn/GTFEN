@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
-from teng_resnet_emo import ResNet_emo, BasicBlock
-from teng_resnet_idex import ResNet_idex
-from teng_resnet_idcl import ResNet_idcl
-from teng_resnet_threed import ResNet_threed,BasicBlock_threed
-from teng_seNet_emo import Se_BasicBlock, SENet
+from backbone.resNet.teng_resnet_emo import ResNet_emo, BasicBlock
+from backbone.resNet.teng_resnet_idex import ResNet_idex
+from backbone.resNet.teng_resnet_idcl import ResNet_idcl
+from backbone.seNet.teng_seNet_idex import SENet_idex
+from backbone.seNet.teng_seNet_idcl import SENet_idcl
+from backbone.teng_resnet_threed import ResNet_threed,BasicBlock_threed
+from backbone.seNet.teng_seNet_emo import Se_BasicBlock, SENet
 import torch.utils.model_zoo as model_zoo
 from ops.basic_ops import ConsensusModule
 
@@ -18,11 +20,11 @@ model_urls = {
 id_pretrain_path = torch.load('/home/developers/tengjianing/myfile/oulu/oulu_vl_s_FD_id_v1_no_ft_rgb_model_best.pth.tar')
 pretrained_dict_3d_path = torch.load("/home/developers/tengjianing/myfile/pretrained_model/resnet-18-kinetics.pth")
 se_pretrain_path = torch.load('/home/developers/tengjianing/another/GTFEN/seresnet18.pth')
-
+id_se_pretrain_path = torch.load("/home/developers/tengjianing/myfile/oulu/seNet18_Oulu_id_rgb_model_best.pth.tar")
 
 def se_dict_vary(pretrain_path):
     se_new_dict = {}
-    for k in id_pretrain_path:
+    for k in pretrain_path:
         a = k.split('.')
         if 'se_module' in a:
             new_name = a[0] + '.' + a[1] + '.' + a[3] + '.' + a[4]
@@ -47,7 +49,7 @@ class emo_id_net(nn.Module):
         super(emo_id_net, self).__init__()
         self.num_segments = num_segments
         self.emo = self.se_resnet18(True)
-        self.idex = self.idextractor(True)
+        self.idex = self.idextractor_se(True)
         self.threed = self.resnetthreed(True)
         self.classifier = nn.Sequential(
             nn.Linear(512 , num_classes),
@@ -67,23 +69,25 @@ class emo_id_net(nn.Module):
 
         
     def forward(self, x): 
-        emo_out = self.emo(x)      #    [112, 128, 28, 28] [112, 512, 1, 1]
+        emo_out = self.emo(x)                 #    [112, 128, 28, 28]
+        emo_visual = emo_out
         emo_out = self.dropout(emo_out)
 
         id_out = self.idex(x)                 #     [112, 128, 28, 28]
+        id_visual = id_out
         id_out = self.dropout(id_out)
         #De-coupler
         id_out = self.idBridge(id_out)
-        TFE = torch.add(emo_out,torch.neg(id_out))                            #   [112, 128, 28, 28]
-        TFE_out = TFE
+        TFE = torch.add(emo_out,torch.neg(id_out))                #   [112, 128, 28, 28]
+        TFE_out = TFE                                             #   [16, 7, 128, 28, 28]
         TFE = TFE.view((-1, self.num_segments)+ TFE.size()[1:])   #   [16, 7, 128, 28, 28]
-        TFE = torch.transpose(TFE, 1, 2)                                #   [16, 128, 7, 28, 28]
-        TFEvector = self.threed(TFE)                                            #   [16, 512, 1, 1, 1]
-        TFEvector = TFEvector.squeeze(2)              #                                 #   [16, 512, 1, 1]
+        TFE = torch.transpose(TFE, 1, 2)                          #   [16, 128, 7, 28, 28]
+        TFEvector = self.threed(TFE)                              #   [16, 512, 1, 1, 1]
+        TFEvector = TFEvector.squeeze(2)                          #   [16, 512, 1, 1]
         TFEvector = self.dropout(TFEvector)
-        TFEvector = TFEvector.view(-1,512)                                               #   [16, 1024]\\
+        TFEvector = TFEvector.view(-1,512)                                               #   [16, 1024]
         final = self.classifier(TFEvector)
-        return TFE_out,final
+        return TFE_out,final,emo_visual,id_visual
         
     def resnet18(self,pretrained=False):
         model = ResNet_emo(BasicBlock, [2, 2, 2, 2])
@@ -111,7 +115,18 @@ class emo_id_net(nn.Module):
             model.module.fc = nn.Linear(model.module.fc.in_features,n_finetune_classes)
             model.module.fc = model.module.fc.cuda()
         return model
-        
+
+    def idextractor_se(self,pretrained=True):
+        model = SENet_idex(Se_BasicBlock, [2, 2, 2, 2])
+        model = model.cuda()
+        model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
+        if pretrained:
+            n_finetune_classes = 80
+            model.load_state_dict(id_se_pretrain_path['state_dict'])
+            model.module.fc = nn.Linear(model.module.fc.in_features,n_finetune_classes)
+            model.module.fc = model.module.fc.cuda()
+        return model
+
     def resnetthreed(self,pretrained=True):
         model = ResNet_threed(BasicBlock_threed, [2, 2, 2, 2], num_classes=400,shortcut_type='A',sample_size=224,sample_duration=16)
         if pretrained:
@@ -132,7 +147,7 @@ class gan_id_net(nn.Module):
     def __init__(self,num_classes, num_segments):
         super(gan_id_net,self).__init__()
         self.num_segments = num_segments
-        self.id_tester = self.idclassifier()
+        self.id_tester = self.idclassifier_se()
         self.classifier = nn.Sequential(nn.Linear(512 , 80))  #80 for number of id in Oulu
 
     def forward(self,x):                    #  [112, 128, 28, 28]
@@ -157,5 +172,15 @@ class gan_id_net(nn.Module):
         model.load_state_dict(new_state_dict)
         return model
 
-
+    def idclassifier_se(self):
+        model = SENet_idcl(Se_BasicBlock, [2, 2, 2, 2])
+        model = model.cuda()
+        model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
+        model_dict = model.state_dict()
+        new_state_dict = {}
+        for k,v in id_se_pretrain_path['state_dict'].items():
+            if (k in model_dict) and (v.size() == model_dict[k].size()):
+                new_state_dict[k] = v
+        model.load_state_dict(new_state_dict)
+        return model
 

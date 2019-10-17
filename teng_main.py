@@ -17,9 +17,9 @@ input_mean = [0.5745987,0.49725866,0.46272627]
 input_std = [0.20716324,0.19548155,0.19786908]       
 num_classes = 6
 num_segments = 7
-batch_size = 16
-epochs = 200
-sstep = 150
+batch_size = 32
+epochs = 150
+sstep = 120
 eval_freq = 5
 
 
@@ -28,7 +28,7 @@ input_size = 224
 lr = 0.001
 Alpha = 5
 
-weight_decay = 0.0001 ###  adjusting
+weight_decay = 0.001 ###  adjusting
 image_source = 'video_by_class_frame_vl_s_FD_new_cross_txtsame_id'
 Log_name = "same3"
 if not os.path.exists("best_models/" + Log_name):
@@ -47,7 +47,7 @@ def main():
     for i in range(10):    
         best_prec1 = 0
         normalize = GroupNormalize(input_mean, input_std)
-        snapshot_pref = "best_models/" + Log_name + "/oulu_fd_minus_18_18_7frames_emo_id_threed_full_fold{}_pretrained".format(i)
+        snapshot_pref = "best_models/" + Log_name + "/oulu_fd_minus_18_18_7frames_emo_id_threed_full_fold{}_Allse".format(i)
         train_augmentation = torchvision.transforms.Compose([GroupScale(244),
                                                             GroupRandomCrop(224),
                                                            GroupRandomHorizontalFlip(is_flow=False)])
@@ -87,8 +87,8 @@ def main():
     
         model_G = emo_id_net(num_classes,num_segments).cuda()
         model_D = gan_id_net(num_classes, num_segments).cuda()
-        initNetParams(model_G)
-        initNetParams(model_D)
+        initNetParams_G(model_G)
+     #   initNetParams(model_D)
         criterion = torch.nn.CrossEntropyLoss().cuda()
         optimizer_G = torch.optim.SGD(model_G.parameters(), lr, momentum = momentum, weight_decay = weight_decay)
         optimizer_D = torch.optim.SGD(model_D.parameters(), lr, momentum = momentum, weight_decay = weight_decay)
@@ -151,7 +151,7 @@ def train_G(train_loader, model_G,model_D, criterion, optimizer_G, epoch):
         target_var = torch.autograd.Variable(target)
         target_id_var = torch.autograd.Variable(target_id)
 
-        TFE_out, output = model_G(input_var)
+        TFE_out, output, _, _ = model_G(input_var)
         output_id = model_D(TFE_out)
 
         loss_exp = criterion(output, target_var)
@@ -181,8 +181,7 @@ def train_D(train_loader, model_G, model_D, criterion, optimizer_D, epoch):
         target_id = target.cuda()
         input_var = torch.autograd.Variable(input)
         target_id_var = torch.autograd.Variable(target_id)
-
-        TFE_out,_ = model_G(input_var)
+        TFE_out, _, _, _ = model_G(input_var)
         output_id = model_D(TFE_out)
         loss = criterion(output_id, target_id_var)
 
@@ -202,7 +201,7 @@ def validate(val_loader, model_G, criterion,iter):
         target = target.cuda()
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
-        _,output = model_G(input_var)
+        _,output, _, _ = model_G(input_var)
         loss = criterion(output, target_var)
         prec1,_ = accuracy(output.data, target, topk=(1,5))
 
@@ -247,7 +246,7 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-def initNetParams(model):
+def initNetParams_G(model):
     for m in model.classifier.modules():
         if isinstance(m, nn.Linear):
             init.xavier_normal_(m.weight)
