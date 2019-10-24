@@ -58,10 +58,10 @@ class emo_id_net(nn.Module):
             nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1,stride=1,padding=0),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=64,out_channels=64,kernel_size=1,stride=1,padding=0),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=1, stride=1, padding=0),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=64,out_channels=128,kernel_size=1,stride=1,padding=0),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=1, stride=1, padding=0),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
         )
