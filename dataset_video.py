@@ -4,6 +4,8 @@ import os
 import os.path
 import numpy as np
 from numpy.random import randint
+from opts import parse_opts
+opt=parse_opts()
 
 class VideoRecord(object):
     def __init__(self, row):
@@ -43,7 +45,10 @@ class TSNDataSet(data.Dataset):
         self._parse_list()
 
     def _load_image(self, directory, idx):
-        return [Image.open(os.path.join(self.root_path, directory, self.image_tmpl.format(idx))).convert('RGB')]
+        if opt.dataset == 'oulu':
+            return [Image.open(os.path.join(self.root_path, directory, self.image_tmpl.format(idx))).convert('RGB')]
+        elif opt.dataset == 'ckplus':
+            return [Image.open(os.path.join(self.root_path, directory, self.image_tmpl.format(idx))).convert('L').convert('RGB')]
 
     def _parse_list(self):
         # check the frame number is large >3:

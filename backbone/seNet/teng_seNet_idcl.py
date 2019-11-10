@@ -65,14 +65,15 @@ class Se_BasicBlock(nn.Module):
 
 class SENet_idcl(nn.Module):
 
-    def __init__(self, block, layers, num_classes=80):
+    def __init__(self, block, layers, id_classes):
         self.inplanes = 128
+        self.num_classes = id_classes
         super(SENet_idcl, self).__init__()
 
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = nn.Linear(512 * block.expansion, self.num_classes)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None

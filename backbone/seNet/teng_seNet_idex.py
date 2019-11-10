@@ -1,7 +1,15 @@
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
+from opts import parse_opts
+opt=parse_opts()
 
+if opt.dataset == 'ckplus':
+    id_classes = 118
+elif opt.dataset == 'oulu':
+    id_classes = 80
+else:
+    id_classes = 0
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -65,8 +73,9 @@ class Se_BasicBlock(nn.Module):
 
 class SENet_idex(nn.Module):
 
-    def __init__(self, block, layers, num_classes=80):
+    def __init__(self, block, layers, id_classes):
         self.inplanes = 64
+        self.num_classes = id_classes
         super(SENet_idex, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
@@ -78,7 +87,7 @@ class SENet_idex(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = nn.Linear(512 * block.expansion, self.num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

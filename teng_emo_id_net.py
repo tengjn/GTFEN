@@ -20,7 +20,6 @@ model_urls = {
 id_pretrain_path = torch.load('/home/developers/tengjianing/myfile/oulu/oulu_vl_s_FD_id_v1_no_ft_rgb_model_best.pth.tar')
 pretrained_dict_3d_path = torch.load("/home/developers/tengjianing/myfile/pretrained_model/resnet-18-kinetics.pth")
 se_pretrain_path = torch.load('/home/developers/tengjianing/another/GTFEN/seresnet18.pth')
-id_se_pretrain_path = torch.load("/home/developers/tengjianing/myfile/oulu/seNet18_Oulu_id_rgb_model_best.pth.tar")
 
 def se_dict_vary(pretrain_path):
     se_new_dict = {}
@@ -45,9 +44,11 @@ def se_dict_vary(pretrain_path):
 se_new_dict = se_dict_vary(se_pretrain_path)
 
 class emo_id_net(nn.Module):
-    def __init__(self, num_classes, num_segments):
+    def __init__(self, num_classes, num_segments,n_finetune_classes,id_se_pretrain_path):
         super(emo_id_net, self).__init__()
         self.num_segments = num_segments
+        self.n_finetune_classes = n_finetune_classes
+        self.id_se_pretrain_path = id_se_pretrain_path
         self.emo = self.se_resnet18(True)
         self.idex = self.idextractor_se(True)
         self.threed = self.resnetthreed(True)
@@ -110,20 +111,18 @@ class emo_id_net(nn.Module):
         model = model.cuda()
         model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
         if pretrained:
-            n_finetune_classes = 80
             model.load_state_dict(id_pretrain_path['state_dict'])
-            model.module.fc = nn.Linear(model.module.fc.in_features,n_finetune_classes)
+            model.module.fc = nn.Linear(model.module.fc.in_features,self.n_finetune_classes)
             model.module.fc = model.module.fc.cuda()
         return model
 
     def idextractor_se(self,pretrained=True):
-        model = SENet_idex(Se_BasicBlock, [2, 2, 2, 2])
+        model = SENet_idex(Se_BasicBlock, [2, 2, 2, 2], self.n_finetune_classes)
         model = model.cuda()
         model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
         if pretrained:
-            n_finetune_classes = 80
-            model.load_state_dict(id_se_pretrain_path['state_dict'])
-            model.module.fc = nn.Linear(model.module.fc.in_features,n_finetune_classes)
+            model.load_state_dict(self.id_se_pretrain_path['state_dict'])
+            model.module.fc = nn.Linear(model.module.fc.in_features,self.n_finetune_classes)
             model.module.fc = model.module.fc.cuda()
         return model
 
@@ -144,11 +143,13 @@ class emo_id_net(nn.Module):
 
 
 class gan_id_net(nn.Module):
-    def __init__(self,num_classes, num_segments):
+    def __init__(self,num_classes, num_segments,n_finetune_classes,id_se_pretrain_path):
         super(gan_id_net,self).__init__()
         self.num_segments = num_segments
+        self.n_finetune_classes = n_finetune_classes
+        self.id_se_pretrain_path = id_se_pretrain_path
         self.id_tester = self.idclassifier_se()
-        self.classifier = nn.Sequential(nn.Linear(512 , 80))  #80 for number of id in Oulu
+        self.classifier = nn.Sequential(nn.Linear(512, self.n_finetune_classes))  #80 for number of id in Oulu
 
     def forward(self,x):                    #  [112, 128, 28, 28]
         consensus = ConsensusModule('avg')
@@ -173,12 +174,12 @@ class gan_id_net(nn.Module):
         return model
 
     def idclassifier_se(self):
-        model = SENet_idcl(Se_BasicBlock, [2, 2, 2, 2])
+        model = SENet_idcl(Se_BasicBlock, [2, 2, 2, 2], self.n_finetune_classes)
         model = model.cuda()
         model = torch.nn.DataParallel(model, device_ids=[0,1,2,3]).cuda()
         model_dict = model.state_dict()
         new_state_dict = {}
-        for k,v in id_se_pretrain_path['state_dict'].items():
+        for k,v in self.id_se_pretrain_path['state_dict'].items():
             if (k in model_dict) and (v.size() == model_dict[k].size()):
                 new_state_dict[k] = v
         model.load_state_dict(new_state_dict)
