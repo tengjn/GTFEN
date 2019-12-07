@@ -28,7 +28,7 @@ def parse_opts():
     )
     parser.add_argument(
         '--sstep',
-        default=120,
+        default=200,
         type=int,
         help='number of epoches of lr decay with rate of 0.1'
     )
@@ -74,5 +74,6 @@ def parse_opts():
         type=str,
         help='dataset u test on'
     )
-    args = parser.parse_args()
+  #  args = parser.parse_args()
+    args = parser.parse_known_args()[0]
     return args

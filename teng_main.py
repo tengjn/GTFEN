@@ -14,9 +14,10 @@ from teng_emo_id_net import *
 from transforms import *
 import torch.nn.functional as F
 from opts import parse_opts
-#from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader
 import numpy as np
-
+writer = SummaryWriter()
 opt=parse_opts()
 
 if opt.dataset == 'oulu':
@@ -24,7 +25,7 @@ if opt.dataset == 'oulu':
     input_std = [0.20716324,0.19548155,0.19786908]
     num_classes = 6
     image_source = 'video_by_class_frame_vl_s_FD_new_cross_txtsame_id'
-    modelDir = 'same3'
+    modelDir = 'same3_2bridge_new'
     image_tmpl = '{:03d}.jpeg'
     root_path = '/home/developers/tengjianing/myfile/oulu/'
     id_classes = 80
@@ -35,7 +36,7 @@ elif opt.dataset == 'ckplus':
     input_std = [0.29019,0.29019,0.29019]    
     num_classes = 7
     image_source = 'ckplus_tenfold_samecroptxt_id'
-    modelDir = 'ckplus_same'
+    modelDir = 'ckplus_same_2bridge'
     image_tmpl = '{:08d}.png'
     root_path = '/home/developers/tengjianing/myfile/ckplus/'
     id_classes = 118
@@ -53,6 +54,9 @@ lr = opt.lr
 weight_decay = opt.weight_decay ###  adjusting
 Alpha = opt.Alpha
 
+device_id = [0,1,2,3]
+device = torch.device('cuda:'+str(device_id[0]))
+
 if not os.path.exists("best_models/" + modelDir):
     os.mkdir("best_models/" + modelDir)
 
@@ -67,18 +71,16 @@ def main():
     print("Alpha is {}".format(Alpha))
     global best_prec1
     global snapshot_pref
-#    writer = SummaryWriter()
     final_accuracy = 0
     ten_fold_best = []
     for i in range(10):    
-        if i == 0 or i == 5 or i == 6 or i== 7 or i == 9:
-            continue
         best_prec1 = 0
         normalize = GroupNormalize(input_mean, input_std)
         snapshot_pref = "best_models/" + modelDir + "/fd_minus_18_18_7frames_emo_id_threed_full_fold{}_Allse".format(i)
         train_augmentation = torchvision.transforms.Compose([GroupScale(244),
                                                             GroupRandomCrop(opt.input_size),
-                                                           GroupRandomHorizontalFlip(is_flow=False)])
+                                                            GroupRandomHorizontalFlip(is_flow=False)
+                                                           ])
         if opt.dataset == 'oulu':
             train_list = image_source + '/oulu_train_{}.txt'.format(i)
             val_list = image_source + '/oulu_test_{}.txt'.format(i)
@@ -88,20 +90,20 @@ def main():
         print(train_list)
         print(val_list)
     
-        train_loader = torch.utils.data.DataLoader(
+        train_loader = DataLoader(
                 dataset = TSNDataSet(root_path, train_list, num_segments=num_segments,
                              new_length=1,
                              image_tmpl=image_tmpl,
                              transform=torchvision.transforms.Compose([
-                             train_augmentation,
-                             Stack(roll=False),
-                             ToTorchFormatTensor(div=True),
-                             normalize,
+                                train_augmentation,
+                                Stack(roll=False),
+                                ToTensor(norm_value=255),
+                                normalize,
                              ])),
                 batch_size=opt.batch_size, shuffle=True,
-                num_workers=30, pin_memory=True, drop_last=True)
-        val_loader = torch.utils.data.DataLoader(
-                TSNDataSet(root_path, val_list, num_segments=num_segments,
+                num_workers=4, pin_memory=False, drop_last=True)
+        val_loader = DataLoader(
+                dataset = TSNDataSet(root_path, val_list, num_segments=num_segments,
                            new_length=1,
                            image_tmpl=image_tmpl,
                            random_shift=False,
@@ -109,16 +111,21 @@ def main():
                                GroupScale(int(244)),
                                GroupCenterCrop(opt.input_size),
                                Stack(roll=False),
-                               ToTorchFormatTensor(div=True),
+                               ToTensor(norm_value=255),
                                normalize,
                            ])),
                 batch_size=opt.batch_size, shuffle=False,
-                num_workers=30, pin_memory=True,drop_last=False)
+                num_workers=4, pin_memory=False,drop_last=False)
     
         model_G = emo_id_net(num_classes,num_segments,id_classes,id_se_pretrain_path).cuda()
         model_D = gan_id_net(num_classes,num_segments,id_classes,id_se_pretrain_path).cuda()
         if i == 0:
-            summary(model_G, (21, 224, 224))
+            summary(model_G, (21, 224, 224))        
+        model_G.to(device)
+        model_D.to(device)
+        model_G = torch.nn.DataParallel(model_G, device_ids=device_id).cuda()
+        model_D = torch.nn.DataParallel(model_D, device_ids=device_id).cuda()
+        
         initNetParams_G(model_G)
         criterion = torch.nn.CrossEntropyLoss().cuda()
         criterion_MSE = torch.nn.MSELoss().cuda()
@@ -128,9 +135,10 @@ def main():
         for epoch in range(0, epochs):
                 adjust_learning_rate(optimizer_G,optimizer_D, epoch, lr)
                 if epoch % 3 == 0:
-                     train_D(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_D, epoch)
+                    train_D(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_D, epoch)
                 else:
-                  train_G(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_G, epoch)
+                    train_G(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_G, epoch)
+ 
                 if (epoch + 1) % eval_freq == 0 or epoch == epochs - 1:
                     prec1 = validate(val_loader, model_G, criterion,(epoch + 1) * len(train_loader))
 
@@ -146,6 +154,7 @@ def main():
         final_accuracy = final_accuracy + best_prec1
     print(ten_fold_best)
     print("Final accuracy is {}".format(final_accuracy))
+                
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -172,19 +181,20 @@ def train_G(train_loader, model_G,model_D, criterion, criterion_MSE, optimizer_G
     model_D.train()
 
     if opt.freeze_id:
-        for param in model_G.idex.parameters():
+        for param in model_G.module.idex.parameters():
             param.requires_grad = False
         
     for i, (input, target, target_id) in enumerate(train_loader):
-        id_one_hot = F.one_hot(target_id, num_classes=id_classes).cuda().cuda()
-        target = target.cuda()
-        target_id = target.cuda()
+        id_one_hot = F.one_hot(target_id, num_classes=id_classes)
+        target = target.to(device)
+        input = input.to(device)
+        id_one_hot = id_one_hot.to(device)
         TFE_out, output, _, _ = model_G(input)
         output_id = model_D(TFE_out)
 
         loss_exp = criterion(output, target)
+        writer.add_scalar('Loss/train',loss_exp.item(),i)
         loss_id = criterion_MSE(output_id, id_one_hot.float())
-   #     loss_id = criterion(output_id, target_id_var)
         loss = Alpha * loss_exp - loss_id
 
         prec1,_ = accuracy(output.data, target, topk=(1,5))
@@ -200,7 +210,8 @@ def train_G(train_loader, model_G,model_D, criterion, criterion_MSE, optimizer_G
                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                         epoch, i, len(train_loader), loss=losses, top1=top1, lr=optimizer_G.param_groups[-1]['lr']))
-            print(output)
+            print(output) 
+
 
 def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D, epoch):
 
@@ -209,7 +220,10 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
     losses = AverageMeter()
     top1 = AverageMeter()
     for i, (input, target, target_id) in enumerate(train_loader):
-        target_id = target_id.cuda()
+
+        target_id = target_id.to(device)
+        input = input.to(device)
+        target_id = target_id.to(device)
         TFE_out, _, _, _ = model_G(input)
         output_id = model_D(TFE_out)
         loss = criterion(output_id, target_id)
@@ -227,7 +241,9 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                         epoch, i, len(train_loader), loss=losses, top1=top1))
-            print(output)
+            print(output) 
+
+        
 
 def validate(val_loader, model_G, criterion,iter):
     batch_time = AverageMeter()
@@ -285,11 +301,18 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 def initNetParams_G(model):
-    for m in model.classifier.modules():
+    for m in model.module.classifier:
         if isinstance(m, nn.Linear):
             init.xavier_normal_(m.weight)
             init.constant_(m.bias, 0)
-    for m in model.idBridge.modules():
+    for m in model.module.idBridge:
+        if isinstance(m, nn.Conv2d):
+            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            m.weight.data.normal_(0, math.sqrt(2. / n))
+        elif isinstance(m, nn.BatchNorm2d):
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
+    for m in model.module.expBridge:
         if isinstance(m, nn.Conv2d):
             n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
             m.weight.data.normal_(0, math.sqrt(2. / n))

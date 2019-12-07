@@ -354,13 +354,7 @@ class Stack(object):
         self.roll = roll
 
     def __call__(self, img_group):
-        if img_group[0].mode == 'L':
-            return np.concatenate([np.expand_dims(x, 2) for x in img_group], axis=2)
-        elif img_group[0].mode == 'RGB':
-            if self.roll:
-                return np.concatenate([np.array(x)[:, :, ::-1] for x in img_group], axis=2)
-            else:
-                return np.concatenate(img_group, axis=2)
+        return np.concatenate(img_group, axis=2)
 
 
 class ToTorchFormatTensor(object):
