@@ -83,13 +83,6 @@ class ResNet_threed(nn.Module):
         self.avgpool = nn.AvgPool3d(
             (2, 7, 7), stride=1)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv3d):
-                m.weight = nn.init.kaiming_normal_(m.weight, mode='fan_out')
-            elif isinstance(m, nn.BatchNorm3d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
     def _make_layer(self, block, planes, blocks, shortcut_type, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:

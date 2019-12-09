@@ -45,7 +45,7 @@ class emo_id_net(nn.Module):
         self.id_se_pretrain_path = id_se_pretrain_path
         self.emo = self.se_resnet18(True)
         self.idex = self.idextractor_se(True)
-        self.threed = self.resnetthreed(True)
+        self.threed = self.resnetthreed(False)
         self.classifier = nn.Sequential(
             nn.Linear(512 , num_classes),
         )
@@ -75,6 +75,11 @@ class emo_id_net(nn.Module):
 
         
     def forward(self, x): 
+        TFE_out = x
+        final = x 
+        emo_visual = x
+        id_visual = x
+        
         emo_out = self.emo(x)                 #    [112, 128, 28, 28]
         emo_visual = emo_out
         emo_out = self.dropout(emo_out)
@@ -88,7 +93,7 @@ class emo_id_net(nn.Module):
         TFE_out = TFE                                             #   [16, 7, 128, 28, 28]
         TFE = TFE.view((-1, self.num_segments)+ TFE.size()[1:])   #   [16, 7, 128, 28, 28]
         TFE = torch.transpose(TFE, 1, 2)                          #   [16, 128, 7, 28, 28]
-        TFEvector = self.threed(TFE)                              #   [16, 512, 1, 1, 1]
+        TFEvector = self.threed(TFE)                              #   HIGH CPU usage!!!!! 
         TFEvector = TFEvector.squeeze(2)                          #   [16, 512, 1, 1]
         TFEvector = self.dropout(TFEvector)
         TFEvector = TFEvector.view(-1,512)                        #   [16, 1024]
@@ -109,7 +114,7 @@ class emo_id_net(nn.Module):
         return model
 
     def resnetthreed(self,pretrained=True):
-        model = ResNet_threed(BasicBlock_threed, [2, 2, 2, 2], num_classes=400,shortcut_type='A',sample_size=224,sample_duration=16)
+        model = ResNet_threed(BasicBlock_threed, [2, 2, 2, 2], num_classes=400,shortcut_type='B',sample_size=224,sample_duration=16)      #   HIGH CPU usage if type == A!!!!! 
         
         if pretrained:
             model_dict = model.state_dict()

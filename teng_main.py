@@ -136,9 +136,10 @@ def main():
                 adjust_learning_rate(optimizer_G,optimizer_D, epoch, lr)
                 if epoch % 3 == 0:
                     train_D(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_D, epoch)
+                
                 else:
                     train_G(train_loader, model_G, model_D, criterion, criterion_MSE, optimizer_G, epoch)
- 
+                
                 if (epoch + 1) % eval_freq == 0 or epoch == epochs - 1:
                     prec1 = validate(val_loader, model_G, criterion,(epoch + 1) * len(train_loader))
 
@@ -189,7 +190,7 @@ def train_G(train_loader, model_G,model_D, criterion, criterion_MSE, optimizer_G
         target = target.to(device)
         input = input.to(device)
         id_one_hot = id_one_hot.to(device)
-        TFE_out, output, _, _ = model_G(input)
+        TFE_out, output, _, _ = model_G(input)    
         output_id = model_D(TFE_out)
 
         loss_exp = criterion(output, target)
@@ -220,11 +221,13 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
     losses = AverageMeter()
     top1 = AverageMeter()
     for i, (input, target, target_id) in enumerate(train_loader):
-
+        print("r u ok")
+        
         target_id = target_id.to(device)
         input = input.to(device)
         target_id = target_id.to(device)
-        TFE_out, _, _, _ = model_G(input)
+        TFE_out, _, _, _ = model_G(input)  ### Problem location
+        '''
         output_id = model_D(TFE_out)
         loss = criterion(output_id, target_id)
 
@@ -242,7 +245,7 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                         epoch, i, len(train_loader), loss=losses, top1=top1))
             print(output) 
-
+        '''
         
 
 def validate(val_loader, model_G, criterion,iter):
