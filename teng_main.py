@@ -58,7 +58,7 @@ device_id = [0,1,2,3]
 device = torch.device('cuda:'+str(device_id[0]))
 
 if not os.path.exists("best_models/" + modelDir):
-    os.mkdir("best_models/" + modelDir)
+    os.makedirs("best_models/" + modelDir)
 
 def main():
     print("Freeze_id is: {}".format(opt.freeze_id))
