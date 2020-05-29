@@ -221,13 +221,12 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
     losses = AverageMeter()
     top1 = AverageMeter()
     for i, (input, target, target_id) in enumerate(train_loader):
-        print("r u ok")
         
         target_id = target_id.to(device)
         input = input.to(device)
         target_id = target_id.to(device)
         TFE_out, _, _, _ = model_G(input)  ### Problem location
-        '''
+        
         output_id = model_D(TFE_out)
         loss = criterion(output_id, target_id)
 
@@ -245,7 +244,7 @@ def train_D(train_loader, model_G, model_D, criterion,criterion_MSE, optimizer_D
                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                         epoch, i, len(train_loader), loss=losses, top1=top1))
             print(output) 
-        '''
+        
         
 
 def validate(val_loader, model_G, criterion,iter):

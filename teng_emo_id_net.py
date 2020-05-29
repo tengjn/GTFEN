@@ -45,7 +45,7 @@ class emo_id_net(nn.Module):
         self.id_se_pretrain_path = id_se_pretrain_path
         self.emo = self.se_resnet18(True)
         self.idex = self.idextractor_se(True)
-        self.threed = self.resnetthreed(False)
+        self.threed = self.resnetthreed(True)
         self.classifier = nn.Sequential(
             nn.Linear(512 , num_classes),
         )
@@ -114,7 +114,7 @@ class emo_id_net(nn.Module):
         return model
 
     def resnetthreed(self,pretrained=True):
-        model = ResNet_threed(BasicBlock_threed, [2, 2, 2, 2], num_classes=400,shortcut_type='B',sample_size=224,sample_duration=16)      #   HIGH CPU usage if type == A!!!!! 
+        model = ResNet_threed(BasicBlock_threed, [2, 2, 2, 2], num_classes=400,shortcut_type='A',sample_size=224,sample_duration=16)      #   HIGH CPU usage if type == A!!!!! 
         
         if pretrained:
             model_dict = model.state_dict()
